@@ -1,4 +1,5 @@
 import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
@@ -10,7 +11,7 @@ import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
-import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 public class AESEncryptionExample {
@@ -32,22 +33,37 @@ public class AESEncryptionExample {
   public static String encryptString(String plainText, String key) throws NoSuchAlgorithmException, InvalidKeySpecException, UnsupportedEncodingException, InvalidKeyException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException {
     SecretKeySpec keySpec = generateKeySpec(key);
 
-    Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-    cipher.init(Cipher.ENCRYPT_MODE, keySpec, generateIV());
+    Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+
+    
+    byte initVector[] = new byte[16];
+    new SecureRandom().nextBytes(initVector);
+
+    cipher.init(Cipher.ENCRYPT_MODE, keySpec, new GCMParameterSpec(128, initVector));
     byte[] encrypted = cipher.doFinal(plainText.getBytes("UTF-8"));
-    return Base64.getEncoder().encodeToString(cipher.getIV()) + Base64.getEncoder().encodeToString(encrypted);
+
+    byte[] encryptedWithIv = ByteBuffer.allocate(initVector.length + encrypted.length)
+      .put(initVector)
+      .put(encrypted)
+      .array();
+    
+    return Base64.getEncoder().encodeToString(encryptedWithIv);
   }
 
   // decrypt AES 256 bit encryption from base64 encoded string
   public static String decryptString(String encryptedText, String key) throws NoSuchAlgorithmException, InvalidKeySpecException, UnsupportedEncodingException, InvalidKeyException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException {
+
+    ByteBuffer byteBuffer = ByteBuffer.wrap(Base64.getDecoder().decode(encryptedText));
+    byte[] iv = new byte[16];
+    byteBuffer.get(iv, 0, iv.length);
+    byte[] encryptedBytes = new byte[byteBuffer.remaining()];
+    byteBuffer.get(encryptedBytes, 0, encryptedBytes.length);
+
     SecretKeySpec keySpec = generateKeySpec(key);
 
-    String iv = encryptedText.substring(0, 24);
-    String message = encryptedText.substring(24);
-
-    Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-    cipher.init(Cipher.DECRYPT_MODE, keySpec, new IvParameterSpec(Base64.getDecoder().decode(iv)));
-    byte[] decrypted = cipher.doFinal(Base64.getDecoder().decode(message));
+    Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+    cipher.init(Cipher.DECRYPT_MODE, keySpec, new GCMParameterSpec(128, iv));
+    byte[] decrypted = cipher.doFinal(encryptedBytes);
     return new String(decrypted);
   }
 
@@ -55,13 +71,6 @@ public class AESEncryptionExample {
   public static SecretKeySpec generateKeySpec(String key) throws NoSuchAlgorithmException, InvalidKeySpecException {
     SecretKeySpec secretKeySpec = new SecretKeySpec(key.getBytes(), "AES");
     return secretKeySpec;
-  }
-
-  // generate an initialization vector (IV)
-  public static IvParameterSpec generateIV() {
-    byte initVector[] = new byte[16];
-    new SecureRandom().nextBytes(initVector);
-    return new IvParameterSpec(initVector);
   }
 
 }
