@@ -36,7 +36,7 @@ public class AESEncryptionExample {
     }
   }
 
-  // perform AES 256 bit encryption and return result as a base64 encoded string
+  // perform AES 256 bit encryption then base64 encode and url encode
   public static String encryptString(String plainText, String key) throws NoSuchAlgorithmException, InvalidKeySpecException, UnsupportedEncodingException, InvalidKeyException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, NoSuchProviderException {
     
     // Generate random initialization vector and salt
@@ -64,7 +64,7 @@ public class AESEncryptionExample {
     return URLEncoder.encode(Base64.getEncoder().encodeToString(encryptedWithSaltAndIv), "UTF-8");
   }
 
-  // decrypt AES 256 bit encryption from base64 encoded string
+  // decrypt AES 256 bit encryption from url encoded and base64 encoded string
   public static String decryptString(String encryptedText, String key) throws NoSuchAlgorithmException, InvalidKeySpecException, UnsupportedEncodingException, InvalidKeyException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, NoSuchProviderException {
 
     // Url decode and then base64 decode encrypted text
