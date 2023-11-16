@@ -1,17 +1,24 @@
 import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.KeySpec;
 import java.util.Base64;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
-import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 
 public class AESEncryptionExample {
@@ -30,46 +37,65 @@ public class AESEncryptionExample {
   }
 
   // perform AES 256 bit encryption and return result as a base64 encoded string
-  public static String encryptString(String plainText, String key) throws NoSuchAlgorithmException, InvalidKeySpecException, UnsupportedEncodingException, InvalidKeyException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException {
-    SecretKeySpec keySpec = generateKeySpec(key);
-
-    Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-
+  public static String encryptString(String plainText, String key) throws NoSuchAlgorithmException, InvalidKeySpecException, UnsupportedEncodingException, InvalidKeyException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, NoSuchProviderException {
     
+    // Generate random initialization vector and salt
     byte initVector[] = new byte[16];
     new SecureRandom().nextBytes(initVector);
+    byte salt[] = new byte[16];
+    new SecureRandom().nextBytes(salt);
 
-    cipher.init(Cipher.ENCRYPT_MODE, keySpec, new GCMParameterSpec(128, initVector));
+    // Create key spec from password and salt
+    SecretKeySpec secretKeySpec = generateKeySpec(key, salt);
+
+    // perform encryption of plain text
+    Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding", "SunJCE");
+    cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, new IvParameterSpec(initVector));
     byte[] encrypted = cipher.doFinal(plainText.getBytes("UTF-8"));
 
-    byte[] encryptedWithIv = ByteBuffer.allocate(initVector.length + encrypted.length)
+    // prepend salt and initialization vector to encrypted data in new byte array
+    byte[] encryptedWithSaltAndIv = ByteBuffer.allocate(salt.length + initVector.length + encrypted.length)
+      .put(salt)
       .put(initVector)
       .put(encrypted)
       .array();
     
-    return Base64.getEncoder().encodeToString(encryptedWithIv);
+    // Base64 encode data, then URL encode to make it HTTP friendly
+    return URLEncoder.encode(Base64.getEncoder().encodeToString(encryptedWithSaltAndIv), "UTF-8");
   }
 
   // decrypt AES 256 bit encryption from base64 encoded string
-  public static String decryptString(String encryptedText, String key) throws NoSuchAlgorithmException, InvalidKeySpecException, UnsupportedEncodingException, InvalidKeyException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException {
+  public static String decryptString(String encryptedText, String key) throws NoSuchAlgorithmException, InvalidKeySpecException, UnsupportedEncodingException, InvalidKeyException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, NoSuchProviderException {
 
-    ByteBuffer byteBuffer = ByteBuffer.wrap(Base64.getDecoder().decode(encryptedText));
+    // Url decode and then base64 decode encrypted text
+    ByteBuffer byteBuffer = ByteBuffer.wrap(Base64.getDecoder().decode(URLDecoder.decode(encryptedText, "UTF-8")));
+
+    // pop the salt off the first 16 bytes
+    byte[] salt = new byte[16];
+    byteBuffer.get(salt, 0, salt.length);
+    // pop the initialization vector off the next 16 bytes
     byte[] iv = new byte[16];
     byteBuffer.get(iv, 0, iv.length);
+    // finally pull the encrypted data out
     byte[] encryptedBytes = new byte[byteBuffer.remaining()];
     byteBuffer.get(encryptedBytes, 0, encryptedBytes.length);
 
-    SecretKeySpec keySpec = generateKeySpec(key);
+    // Generate secret key spec from shared password and salt
+    SecretKeySpec secretKeySpec = generateKeySpec(key, salt);
 
-    Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-    cipher.init(Cipher.DECRYPT_MODE, keySpec, new GCMParameterSpec(128, iv));
+    // perform decryption and return decrypted string
+    Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding", "SunJCE");
+    cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, new IvParameterSpec(iv));
     byte[] decrypted = cipher.doFinal(encryptedBytes);
     return new String(decrypted);
   }
 
  // generate a secret key spec from a password and salt
-  public static SecretKeySpec generateKeySpec(String key) throws NoSuchAlgorithmException, InvalidKeySpecException {
-    SecretKeySpec secretKeySpec = new SecretKeySpec(key.getBytes(), "AES");
+  public static SecretKeySpec generateKeySpec(String key, byte[] salt) throws NoSuchAlgorithmException, InvalidKeySpecException {
+    KeySpec keySpec = new PBEKeySpec(key.toCharArray(), salt, 65536, 256);
+    SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+    SecretKey secretKey = secretKeyFactory.generateSecret(keySpec);
+    SecretKeySpec secretKeySpec = new SecretKeySpec(secretKey.getEncoded(), "AES");
     return secretKeySpec;
   }
 
