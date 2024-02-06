@@ -10,6 +10,7 @@ import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 import java.util.Base64;
+import java.util.HexFormat;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
@@ -53,32 +54,31 @@ public class AESEncryptionExample {
     cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, new IvParameterSpec(initVector));
     byte[] encrypted = cipher.doFinal(plainText.getBytes("UTF-8"));
 
-    // prepend salt and initialization vector to encrypted data in new byte array
-    byte[] encryptedWithSaltAndIv = ByteBuffer.allocate(salt.length + initVector.length + encrypted.length)
-      .put(salt)
-      .put(initVector)
-      .put(encrypted)
-      .array();
-    
-    // Base64 encode data, then URL encode to make it HTTP friendly
-    return URLEncoder.encode(Base64.getEncoder().encodeToString(encryptedWithSaltAndIv), "UTF-8");
+    // Convert salt and initialization vector to HEX
+    String saltHex = HexFormat.of().formatHex(salt);
+    String initVectorHex = HexFormat.of().formatHex(initVector);
+
+    // Base64 encode encrypted data.
+    String encryptedBase64 = Base64.getEncoder().encodeToString(encrypted);
+
+    // Concatenate salt, initialization vector, and encrypted data into a single string to be Base64 encoded and then URL encoded.
+    String message = saltHex + initVectorHex + encryptedBase64;
+
+    return URLEncoder.encode(Base64.getEncoder().encodeToString(message.getBytes()), "UTF-8");
   }
 
   // decrypt AES 256 bit encryption from url encoded and base64 encoded string
   public static String decryptString(String encryptedText, String key) throws NoSuchAlgorithmException, InvalidKeySpecException, UnsupportedEncodingException, InvalidKeyException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, NoSuchProviderException {
 
-    // Url decode and then base64 decode encrypted text
-    ByteBuffer byteBuffer = ByteBuffer.wrap(Base64.getDecoder().decode(URLDecoder.decode(encryptedText, "UTF-8")));
+    // Url decode and base64 decode encrypted string
+    String urlDecodedString = URLDecoder.decode(encryptedText, "UTF-8");
+    byte[] byteArray = Base64.getDecoder().decode(urlDecodedString);
+    String message = new String(byteArray);
 
-    // pop the salt off the first 16 bytes
-    byte[] salt = new byte[16];
-    byteBuffer.get(salt, 0, salt.length);
-    // pop the initialization vector off the next 16 bytes
-    byte[] iv = new byte[16];
-    byteBuffer.get(iv, 0, iv.length);
-    // finally pull the encrypted data out
-    byte[] encryptedBytes = new byte[byteBuffer.remaining()];
-    byteBuffer.get(encryptedBytes, 0, encryptedBytes.length);
+    // Extract salt, initialization vector, and encrypted data from the message
+    byte[] salt = HexFormat.of().parseHex(message.substring(0, 32));
+    byte[] iv = HexFormat.of().parseHex(message.substring(32, 64));
+    byte[] encryptedBytes = Base64.getDecoder().decode(message.substring(64));
 
     // Generate secret key spec from shared password and salt
     SecretKeySpec secretKeySpec = generateKeySpec(key, salt);
