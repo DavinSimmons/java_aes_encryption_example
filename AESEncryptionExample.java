@@ -28,7 +28,7 @@ public class AESEncryptionExample {
     final String key = "example-key-12345670123456789012";
     try {
       String encryptedString = encryptString("Hello World!", key);
-      System.out.println("Encrypted String: " + encryptedString);
+      System.out.println("Encrypted and URL Encoded String: " + encryptedString);
       String decryptedString = decryptString(encryptedString, key);
       System.out.println("Decrypted String: " + decryptedString);
     } catch (Exception e) {
@@ -42,7 +42,7 @@ public class AESEncryptionExample {
     // Generate random initialization vector and salt
     byte initVector[] = new byte[16];
     new SecureRandom().nextBytes(initVector);
-    byte salt[] = new byte[16];
+    byte salt[] = new byte[8];
     new SecureRandom().nextBytes(salt);
 
     // Create key spec from password and salt
@@ -53,31 +53,24 @@ public class AESEncryptionExample {
     cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, new IvParameterSpec(initVector));
     byte[] encrypted = cipher.doFinal(plainText.getBytes("UTF-8"));
 
-    // Convert salt and initialization vector to HEX
-    String saltHex = HexFormat.of().formatHex(salt);
-    String initVectorHex = HexFormat.of().formatHex(initVector);
-
-    // Base64 encode encrypted data.
-    String encryptedBase64 = Base64.getEncoder().encodeToString(encrypted);
-
-    // Concatenate salt, initialization vector, and encrypted data into a single string to be Base64 encoded and then URL encoded.
-    String message = saltHex + initVectorHex + encryptedBase64;
-
-    return URLEncoder.encode(Base64.getEncoder().encodeToString(message.getBytes()), "UTF-8");
+    String encryptedWithSaltAndIv = HexFormat.of().formatHex(salt) + HexFormat.of().formatHex(initVector) + Base64.getEncoder().encodeToString(encrypted);
+    
+    // URL encode to make it HTTP friendly
+    return URLEncoder.encode(encryptedWithSaltAndIv, "UTF-8");
   }
 
   // decrypt AES 256 bit encryption from url encoded and base64 encoded string
   public static String decryptString(String encryptedText, String key) throws NoSuchAlgorithmException, InvalidKeySpecException, UnsupportedEncodingException, InvalidKeyException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, NoSuchProviderException {
 
-    // Url decode and base64 decode encrypted string
-    String urlDecodedString = URLDecoder.decode(encryptedText, "UTF-8");
-    byte[] byteArray = Base64.getDecoder().decode(urlDecodedString);
-    String message = new String(byteArray);
+    // Url decode and then base64 decode encrypted text
+    String message = URLDecoder.decode(encryptedText, "UTF-8");
 
-    // Extract salt, initialization vector, and encrypted data from the message
-    byte[] salt = HexFormat.of().parseHex(message.substring(0, 32));
-    byte[] iv = HexFormat.of().parseHex(message.substring(32, 64));
-    byte[] encryptedBytes = Base64.getDecoder().decode(message.substring(64));
+    // get the salt out of the first 16 characters
+    byte[] salt = HexFormat.of().parseHex(message.substring(0, 16));
+    // get the initialization vector out of the next 32 characters
+    byte[] iv = HexFormat.of().parseHex(message.substring(16, 48));
+    // finally pull the encrypted data out
+    byte[] encryptedBytes = Base64.getDecoder().decode(message.substring(48));
 
     // Generate secret key spec from shared password and salt
     SecretKeySpec secretKeySpec = generateKeySpec(key, salt);
@@ -91,8 +84,8 @@ public class AESEncryptionExample {
 
  // generate a secret key spec from a password and salt
   public static SecretKeySpec generateKeySpec(String key, byte[] salt) throws NoSuchAlgorithmException, InvalidKeySpecException {
-    KeySpec keySpec = new PBEKeySpec(key.toCharArray(), salt, 65536, 256);
-    SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+    KeySpec keySpec = new PBEKeySpec(key.toCharArray(), salt, 1000, 256);
+    SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
     SecretKey secretKey = secretKeyFactory.generateSecret(keySpec);
     SecretKeySpec secretKeySpec = new SecretKeySpec(secretKey.getEncoded(), "AES");
     return secretKeySpec;
