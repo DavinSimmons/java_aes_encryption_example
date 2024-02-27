@@ -59,10 +59,10 @@ public class AESEncryptionExample {
     return URLEncoder.encode(encryptedWithSaltAndIv, "UTF-8");
   }
 
-  // decrypt AES 256 bit encryption from url encoded and base64 encoded string
+  // decrypt AES 256 bit encryption from url encoded string
   public static String decryptString(String encryptedText, String key) throws NoSuchAlgorithmException, InvalidKeySpecException, UnsupportedEncodingException, InvalidKeyException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, NoSuchProviderException {
 
-    // Url decode and then base64 decode encrypted text
+    // Url decode string
     String message = URLDecoder.decode(encryptedText, "UTF-8");
 
     // get the salt out of the first 16 characters
